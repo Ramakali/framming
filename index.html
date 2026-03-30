@@ -8,16 +8,15 @@
     <style>
         :root { --primary: #2563eb; --secondary: #10b981; --bg: #f1f5f9; }
         
-        /* Ajuste para permitir scroll real no celular */
         body { 
             font-family: system-ui, -apple-system, sans-serif; 
             margin: 0; 
             background: var(--bg); 
             color: #1e293b; 
-            overflow-y: auto; /* Permite rolar para baixo */
+            overflow-y: auto; 
             min-height: 100vh;
         }
-    
+
         .container { 
             max-width: 600px; 
             margin: auto; 
@@ -26,36 +25,55 @@
             flex-direction: column;
             gap: 15px;
         }
-    
-        /* Ajuste de Abas para não quebrar */
+
+        /* Menu de Abas Fixo */
         .tabs { 
             display: flex; 
             overflow-x: auto; 
             background: #e2e8f0; 
             border-radius: 8px; 
             padding: 2px;
-            sticky: top; 
-            z-index: 10;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
-    
+
+        .tab-btn { 
+            flex: 1; 
+            padding: 12px 5px; 
+            border: none; 
+            background: none; 
+            cursor: pointer; 
+            font-size: 0.75rem; 
+            font-weight: bold; 
+            white-space: nowrap; 
+            color: #64748b; 
+        }
+
+        .tab-btn.active { 
+            background: white; 
+            color: var(--primary); 
+            border-radius: 6px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
+        }
+
+        .tab-content { display: none; flex-direction: column; gap: 15px; }
+        .tab-content.active { display: flex; }
+
         .visualizer { 
             width: 100%; 
             background: #333; 
             border-radius: 8px; 
-            height: 50vh; /* Limita a altura da imagem à metade da tela */
+            height: 45vh; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
             overflow: hidden; 
             border: 2px solid #cbd5e1;
         }
-    
-        canvas, img { 
-            max-width: 100%; 
-            max-height: 100%; 
-            object-fit: contain; /* Garante que a imagem caiba no quadro sem cortar */
-        }
-    
+
+        canvas, img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
         .control-card { 
             background: white; 
             padding: 15px; 
@@ -65,18 +83,15 @@
             flex-direction: column; 
             gap: 10px;
         }
-    
-        /* Botão de captura e controles sempre visíveis */
-        .btn-main { 
-            background: var(--primary); 
-            color: white; 
-            padding: 15px; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            font-size: 1rem;
-        }
-    
-        /* Ajuste do Overlay da Câmera */
+
+        .control-group { display: flex; flex-direction: column; gap: 4px; }
+        label { font-size: 0.75rem; font-weight: bold; color: #64748b; }
+        input[type="number"], input[type="file"] { padding: 8px; border: 1px solid #ddd; border-radius: 6px; }
+
+        .btn-main { background: var(--primary); color: white; padding: 15px; border-radius: 8px; border:none; font-weight: bold; }
+        .btn-cam { background: #6366f1; color: white; padding: 10px; border-radius: 8px; border:none; margin-bottom: 5px; font-weight: bold;}
+        .download-btn { background: var(--secondary); color: white; padding: 15px; border-radius: 8px; border:none; font-weight: bold; margin-top: 10px;}
+
         #cameraArea { 
             display: none; 
             position: fixed; 
@@ -87,27 +102,30 @@
             flex-direction: column; 
         }
         #video { flex: 1; width: 100%; object-fit: contain; }
-        .camera-controls { 
-            padding: 20px; 
-            background: rgba(0,0,0,0.8); 
-            display: flex; 
-            gap: 10px; 
-        }
+        .camera-controls { padding: 20px; background: rgba(0,0,0,0.8); display: flex; gap: 10px; }
     </style>
-    
+</head>
+<body>
+
+<div class="container">
+    <div class="tabs">
+        <button class="tab-btn active" onclick="openTab(event, 'tabIn')">1. Foto</button>
+        <button class="tab-btn" onclick="openTab(event, 'tabWarp')">2. Plano</button>
+        <button class="tab-btn" onclick="openTab(event, 'tabCrop')">3. Corte</button>
+        <button class="tab-btn" onclick="openTab(event, 'tabFinal')">4. Final</button>
+    </div>
+
     <div id="tabIn" class="tab-content active">
         <div class="control-card">
             <button class="btn-cam" onclick="startCamera()">Abrir Câmera Traseira</button>
             <input type="file" id="fileInput" accept="image/*">
         </div>
-    
         <div class="visualizer">
             <img id="imgOriginal" src="" style="display:none">
             <p id="msgIn" style="color:white">Aguardando Imagem...</p>
         </div>
-    
         <div class="control-card">
-            <label>Ajuste Fino de Detecção (Canny)</label>
+            <label>Contraste de Detecção (Canny)</label>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                 <div class="control-group">
                     <label>Fracas: <span id="valCanny1">50</span></label>
@@ -121,20 +139,9 @@
             <button class="btn-main" onclick="processWarp()">Confirmar e Planificar</button>
         </div>
     </div>
-    
-    <div id="cameraArea">
-        <video id="video" autoplay playsinline></video>
-        <div class="camera-controls">
-            <button class="btn-main" onclick="capture()">Tirar Foto</button>
-            <button style="background:#ef4444; color:white; padding:15px; border-radius:8px;" onclick="stopCamera()">Cancelar</button>
-        </div>
-    </div>
-
 
     <div id="tabWarp" class="tab-content">
-        <div class="control-card">
-            <label>Resultado da Planificação (Obra Reta)</label>
-        </div>
+        <div class="control-card"><label>Resultado da Planificação</label></div>
         <div class="visualizer"><canvas id="canvasWarp"></canvas></div>
         <button class="btn-main" onclick="openTab(null, 'tabCrop')">Ir para Remoção de Moldura</button>
     </div>
@@ -156,8 +163,8 @@
 
     <div id="tabFinal" class="tab-content">
         <div class="control-card">
-            <div class="control-group"><label>Cor</label><input type="color" id="frameColor" value="#1a1a1a" onchange="drawNewFrame()"></div>
-            <div class="control-group"><label>Nova Moldura (mm)</label><input type="number" id="newFrameMM" value="20" onchange="drawNewFrame()"></div>
+            <div class="control-group"><label>Cor da Moldura</label><input type="color" id="frameColor" value="#1a1a1a" onchange="drawNewFrame()"></div>
+            <div class="control-group"><label>Espessura Nova (mm)</label><input type="number" id="newFrameMM" value="20" onchange="drawNewFrame()"></div>
         </div>
         <div class="visualizer"><canvas id="canvasFinal"></canvas></div>
         <button class="download-btn" onclick="downloadResult()">Download PNG</button>
@@ -166,7 +173,10 @@
 
 <div id="cameraArea">
     <video id="video" autoplay playsinline></video>
-    <div style="padding: 20px; display: flex; gap: 10px;"><button class="btn-main" onclick="capture()">Capturar</button><button style="background:red; color:white" onclick="stopCamera()">Sair</button></div>
+    <div class="camera-controls">
+        <button class="btn-main" style="flex:1" onclick="capture()">Capturar</button>
+        <button style="background:red; color:white; border:none; padding:15px; border-radius:8px;" onclick="stopCamera()">Sair</button>
+    </div>
 </div>
 
 <script>
@@ -176,26 +186,33 @@
         document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
         document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
         document.getElementById(tabId).classList.add("active");
-        if(evt) evt.target.classList.add("active");
-        else {
-            // Sincroniza o botão se a aba for aberta via função
-            const idx = ["tabIn", "tabWarp", "tabCrop", "tabFinal"].indexOf(tabId);
-            document.querySelectorAll(".tab-btn")[idx].classList.add("active");
-        }
+        
+        const btnIdx = ["tabIn", "tabWarp", "tabCrop", "tabFinal"].indexOf(tabId);
+        document.querySelectorAll(".tab-btn")[btnIdx].classList.add("active");
     }
 
-    function updateOffset(v) { document.getElementById('valOffset').innerText = v; processCrop(); }
+    function updateCanny() {
+        document.getElementById('valCanny1').innerText = document.getElementById('canny1').value;
+        document.getElementById('valCanny2').innerText = document.getElementById('canny2').value;
+    }
+
+    function updateOffset(v) { 
+        document.getElementById('valOffset').innerText = v; 
+        processCrop(); 
+    }
 
     async function startCamera() {
         const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         document.getElementById('video').srcObject = s;
         document.getElementById('cameraArea').style.display = 'flex';
     }
+
     function stopCamera() {
         let s = document.getElementById('video').srcObject;
         if(s) s.getTracks().forEach(t => t.stop());
         document.getElementById('cameraArea').style.display = 'none';
     }
+
     function capture() {
         const v = document.getElementById('video'), c = document.createElement('canvas');
         c.width = v.videoWidth; c.height = v.videoHeight;
@@ -216,35 +233,17 @@
         r.readAsDataURL(e.target.files[0]);
     };
 
-    function updateCanny() {
-    document.getElementById('valCanny1').innerText = document.getElementById('canny1').value;
-    document.getElementById('valCanny2').innerText = document.getElementById('canny2').value;
-    // Opcional: Você pode chamar uma função de preview rápido aqui se quiser ver as bordas piscando
-    }
-
     function processWarp() {
         let img = document.getElementById('imgOriginal');
-        if(!img.src || img.src === "") return alert("Carregue uma imagem!");
-        
-        let src = cv.imread(img);
-        let gray = new cv.Mat();
-        let edged = new cv.Mat();
-        
-        // Converte e aplica Blur para reduzir ruído da parede
+        if(!img.src || img.src.length < 100) return alert("Carregue uma imagem!");
+        let src = cv.imread(img), gray = new cv.Mat(), edged = new cv.Mat();
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
         cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
-        
-        // PEGA OS VALORES DOS SLIDERS
         let c1 = parseInt(document.getElementById('canny1').value);
         let c2 = parseInt(document.getElementById('canny2').value);
-        
-        // Detecção de bordas com os novos parâmetros
         cv.Canny(gray, edged, c1, c2);
-    
-        let contours = new cv.MatVector();
-        let hierarchy = new cv.Mat();
+        let contours = new cv.MatVector(), hierarchy = new cv.Mat();
         cv.findContours(edged, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-    
         let maxA = 0, best = null;
         for (let i = 0; i < contours.size(); ++i) {
             let cnt = contours.get(i);
@@ -252,43 +251,29 @@
             if (area > maxA) {
                 let approx = new cv.Mat();
                 cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
-                if (approx.rows == 4) { 
-                    maxA = area; 
-                    if(best) best.delete(); 
-                    best = approx; 
-                } else {
-                    approx.delete();
-                }
+                if (approx.rows == 4) { maxA = area; if(best) best.delete(); best = approx; }
+                else approx.delete();
             }
         }
-    
         if(best) {
             let pts = [];
             for(let i=0; i<4; i++) pts.push({x: best.data32S[i*2], y: best.data32S[i*2+1]});
             pts.sort((a,b) => a.y - b.y);
-            let top = pts.slice(0,2).sort((a,b) => a.x - b.x);
-            let bot = pts.slice(2,4).sort((a,b) => a.x - b.x);
+            let top = pts.slice(0,2).sort((a,b) => a.x - b.x), bot = pts.slice(2,4).sort((a,b) => a.x - b.x);
             let sorted = [top[0], top[1], bot[1], bot[0]];
-    
             let w = Math.max(Math.hypot(sorted[1].x-sorted[0].x, sorted[1].y-sorted[0].y), Math.hypot(sorted[2].x-sorted[3].x, sorted[2].y-sorted[3].y));
             let h = Math.max(Math.hypot(sorted[3].x-sorted[0].x, sorted[3].y-sorted[0].y), Math.hypot(sorted[2].x-sorted[1].x, sorted[2].y-sorted[1].y));
-    
             let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [sorted[0].x, sorted[0].y, sorted[1].x, sorted[1].y, sorted[2].x, sorted[2].y, sorted[3].x, sorted[3].y]);
             let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, w, 0, w, h, 0, h]);
             let M = cv.getPerspectiveTransform(srcTri, dstTri);
-    
             if(matWarped) matWarped.delete();
             matWarped = new cv.Mat();
             cv.warpPerspective(src, matWarped, M, new cv.Size(w, h));
             cv.imshow('canvasWarp', matWarped);
-    
             srcTri.delete(); dstTri.delete(); M.delete(); best.delete();
             processCrop();
             openTab(null, 'tabWarp');
-        } else {
-            alert("Falha na detecção automática. Tente diminuir o valor de 'Bordas Fracas'.");
-        }
-        
+        } else alert("Quadro não detectado!");
         src.delete(); gray.delete(); edged.delete(); contours.delete(); hierarchy.delete();
     }
 

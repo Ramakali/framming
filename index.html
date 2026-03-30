@@ -194,18 +194,33 @@
             document.getElementById('txtExt').innerText = `Externo: ${refMM} x ${(h/scale).toFixed(1)} mm`;
             document.getElementById('txtInt').innerText = `Interno: ${((w-2*ripaPx)/scale).toFixed(1)} x ${((h-2*ripaPx)/scale).toFixed(1)} mm`;
 
-            // 4. Corte (Sem Moldura)
-            let rect = new cv.Rect(ripaPx, ripaPx, w - 2*ripaPx, h - 2*ripaPx);
-            let cropped = warped.roi(rect);
-            cv.imshow('canvasCrop', cropped);
+            // 4. Corte (Extração da Arte Pura - SEM a moldura original)
+            // O ripaPx define quanto vamos "entrar" na imagem para ignorar a moldura
+            let rect = new cv.Rect(ripaPx, ripaPx, w - 2 * ripaPx, h - 2 * ripaPx);
+            
+            // Segurança: Garante que o retângulo de corte não seja inválido ou negativo
+            if (rect.width > 0 && rect.height > 0) {
+                let cropped = warped.roi(rect);
+                cv.imshow('canvasCrop', cropped);
 
-            // 5. Nova Moldura
-            const fW = parseInt(document.getElementById('newFrameWidth').value);
-            const color = document.getElementById('frameColor').value;
-            const r = parseInt(color.slice(1,3), 16), g = parseInt(color.slice(3,5), 16), b = parseInt(color.slice(5,7), 16);
-            let final = new cv.Mat();
-            cv.copyMakeBorder(cropped, final, fW, fW, fW, fW, cv.BORDER_CONSTANT, [r, g, b, 255]);
-            cv.imshow('canvasFinal', final);
+                // 5. Nova Moldura (Aplicada sobre a arte já limpa)
+                const fW = parseInt(document.getElementById('newFrameWidth').value);
+                const color = document.getElementById('frameColor').value;
+                const r = parseInt(color.slice(1,3), 16), 
+                      g = parseInt(color.slice(3,5), 16), 
+                      b = parseInt(color.slice(5,7), 16);
+                
+                let final = new cv.Mat();
+                // A função copyMakeBorder ADICIONA bordas novas ao redor da imagem limpa
+                cv.copyMakeBorder(cropped, final, fW, fW, fW, fW, cv.BORDER_CONSTANT, [r, g, b, 255]);
+                cv.imshow('canvasFinal', final);
+
+                // Cleanup das matrizes específicas deste bloco
+                final.delete();
+                cropped.delete(); 
+            } else {
+                console.error("Erro: O valor da Ripa é maior que a própria imagem.");
+            }
 
             // Cleanup
             warped.delete(); cropped.delete(); final.delete(); M.delete();

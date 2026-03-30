@@ -52,9 +52,26 @@
         <div class="control-card">
             <button class="btn-cam" onclick="startCamera()">Usar Câmera Traseira</button>
             <input type="file" id="fileInput" accept="image/*">
+            
+            <div style="border-top: 1px solid #eee; padding-top: 10px; margin-top: 5px;">
+                <label>Sensibilidade de Detecção (Canny)</label>
+                <div class="control-group">
+                    <label>Bordas Fracas: <span id="valCanny1">50</span></label>
+                    <input type="range" id="canny1" min="10" max="200" value="50" oninput="updateCanny()">
+                </div>
+                <div class="control-group">
+                    <label>Bordas Fortes: <span id="valCanny2">150</span></label>
+                    <input type="range" id="canny2" min="100" max="400" value="150" oninput="updateCanny()">
+                </div>
+                <small style="font-size: 0.7rem; color: #64748b;">Ajuste se a moldura não for detectada (clara no claro).</small>
+            </div>
         </div>
-        <div class="visualizer"><img id="imgOriginal" src="" style="display:none"><p id="msgIn">Sem Imagem</p></div>
-        <button class="btn-main" onclick="processWarp()">Gerar Planificação</button>
+        <div class="visualizer">
+            <img id="imgOriginal" src="" style="display:none">
+            <canvas id="canvasPreview" style="max-width: 100%;"></canvas>
+            <p id="msgIn">Sem Imagem</p>
+        </div>
+        <button class="btn-main" onclick="processWarp()">Confirmar e Planificar</button>
     </div>
 
     <div id="tabWarp" class="tab-content">
@@ -142,44 +159,80 @@
         r.readAsDataURL(e.target.files[0]);
     };
 
+    function updateCanny() {
+    document.getElementById('valCanny1').innerText = document.getElementById('canny1').value;
+    document.getElementById('valCanny2').innerText = document.getElementById('canny2').value;
+    // Opcional: Você pode chamar uma função de preview rápido aqui se quiser ver as bordas piscando
+    }
+
     function processWarp() {
         let img = document.getElementById('imgOriginal');
-        if(!img.src) return alert("Carregue uma imagem!");
-        let src = cv.imread(img), gray = new cv.Mat();
+        if(!img.src || img.src === "") return alert("Carregue uma imagem!");
+        
+        let src = cv.imread(img);
+        let gray = new cv.Mat();
+        let edged = new cv.Mat();
+        
+        // Converte e aplica Blur para reduzir ruído da parede
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-        cv.Canny(gray, gray, 50, 150);
-        let contours = new cv.MatVector(), hierarchy = new cv.Mat();
-        cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+        cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
+        
+        // PEGA OS VALORES DOS SLIDERS
+        let c1 = parseInt(document.getElementById('canny1').value);
+        let c2 = parseInt(document.getElementById('canny2').value);
+        
+        // Detecção de bordas com os novos parâmetros
+        cv.Canny(gray, edged, c1, c2);
+    
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(edged, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    
         let maxA = 0, best = null;
         for (let i = 0; i < contours.size(); ++i) {
             let cnt = contours.get(i);
-            if (cv.contourArea(cnt) > maxA) {
+            let area = cv.contourArea(cnt);
+            if (area > maxA) {
                 let approx = new cv.Mat();
                 cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
-                if (approx.rows == 4) { maxA = cv.contourArea(cnt); if(best) best.delete(); best = approx; }
-                else approx.delete();
+                if (approx.rows == 4) { 
+                    maxA = area; 
+                    if(best) best.delete(); 
+                    best = approx; 
+                } else {
+                    approx.delete();
+                }
             }
         }
+    
         if(best) {
             let pts = [];
             for(let i=0; i<4; i++) pts.push({x: best.data32S[i*2], y: best.data32S[i*2+1]});
             pts.sort((a,b) => a.y - b.y);
-            let top = pts.slice(0,2).sort((a,b) => a.x - b.x), bot = pts.slice(2,4).sort((a,b) => a.x - b.x);
+            let top = pts.slice(0,2).sort((a,b) => a.x - b.x);
+            let bot = pts.slice(2,4).sort((a,b) => a.x - b.x);
             let sorted = [top[0], top[1], bot[1], bot[0]];
+    
             let w = Math.max(Math.hypot(sorted[1].x-sorted[0].x, sorted[1].y-sorted[0].y), Math.hypot(sorted[2].x-sorted[3].x, sorted[2].y-sorted[3].y));
             let h = Math.max(Math.hypot(sorted[3].x-sorted[0].x, sorted[3].y-sorted[0].y), Math.hypot(sorted[2].x-sorted[1].x, sorted[2].y-sorted[1].y));
+    
             let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [sorted[0].x, sorted[0].y, sorted[1].x, sorted[1].y, sorted[2].x, sorted[2].y, sorted[3].x, sorted[3].y]);
             let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, w, 0, w, h, 0, h]);
             let M = cv.getPerspectiveTransform(srcTri, dstTri);
+    
             if(matWarped) matWarped.delete();
             matWarped = new cv.Mat();
             cv.warpPerspective(src, matWarped, M, new cv.Size(w, h));
             cv.imshow('canvasWarp', matWarped);
+    
             srcTri.delete(); dstTri.delete(); M.delete(); best.delete();
             processCrop();
             openTab(null, 'tabWarp');
-        } else alert("Quadro não detectado!");
-        src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+        } else {
+            alert("Falha na detecção automática. Tente diminuir o valor de 'Bordas Fracas'.");
+        }
+        
+        src.delete(); gray.delete(); edged.delete(); contours.delete(); hierarchy.delete();
     }
 
     function processCrop() {

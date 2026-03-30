@@ -196,10 +196,10 @@
 
             // 4. Corte (Sem Moldura)
             let rect = new cv.Rect(ripaPx, ripaPx, w - 2*ripaPx, h - 2*ripaPx);
-            let roi = warped.roi(rect);
-            let cropped = roi.clone();
+            let sem_moldura = warped.roi(rect);
+            let cropped = sem_moldura.clone();
             cv.imshow('canvasCrop', cropped);
-            
+            sem_moldura.delete();
 
             // 5. Nova Moldura
             const fW = parseInt(document.getElementById('newFrameWidth').value);

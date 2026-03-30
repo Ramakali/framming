@@ -7,72 +7,129 @@
     <script async src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript"></script>
     <style>
         :root { --primary: #2563eb; --secondary: #10b981; --bg: #f1f5f9; }
-        body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: var(--bg); color: #1e293b; }
-        .header { background: white; padding: 15px; border-bottom: 1px solid #e2e8f0; text-align: center; }
-        .container { max-width: 600px; margin: auto; padding: 10px; }
         
-        /* Abas Scroláveis no Mobile */
-        .tabs { display: flex; overflow-x: auto; background: #e2e8f0; border-radius: 8px; margin-bottom: 15px; gap: 2px; padding: 2px; }
-        .tab-btn { flex: 1; padding: 10px 5px; border: none; background: none; cursor: pointer; font-size: 0.75rem; font-weight: bold; white-space: nowrap; color: #64748b; }
-        .tab-btn.active { background: white; color: var(--primary); border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-        
-        .tab-content { display: none; flex-direction: column; gap: 12px; }
-        .tab-content.active { display: flex; }
-
-        .control-card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 10px; }
-        .control-group { display: flex; flex-direction: column; gap: 4px; }
-        label { font-size: 0.75rem; font-weight: bold; color: #64748b; }
-        input { padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; }
-        
-        .visualizer { width: 100%; background: #ddd; border-radius: 8px; min-height: 250px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;}
-        canvas, img { max-width: 100%; height: auto; display: block; }
-        
-        button { padding: 12px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; }
-        .btn-main { background: var(--primary); color: white; width: 100%; }
-        .btn-cam { background: #6366f1; color: white; }
-        .download-btn { background: var(--secondary); color: white; margin-top: 10px; }
-        
-        #cameraArea { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; z-index: 1000; flex-direction: column; }
-        #video { flex: 1; object-fit: cover; }
+        /* Ajuste para permitir scroll real no celular */
+        body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            margin: 0; 
+            background: var(--bg); 
+            color: #1e293b; 
+            overflow-y: auto; /* Permite rolar para baixo */
+            min-height: 100vh;
+        }
+    
+        .container { 
+            max-width: 600px; 
+            margin: auto; 
+            padding: 10px; 
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+    
+        /* Ajuste de Abas para não quebrar */
+        .tabs { 
+            display: flex; 
+            overflow-x: auto; 
+            background: #e2e8f0; 
+            border-radius: 8px; 
+            padding: 2px;
+            sticky: top; 
+            z-index: 10;
+        }
+    
+        .visualizer { 
+            width: 100%; 
+            background: #333; 
+            border-radius: 8px; 
+            height: 50vh; /* Limita a altura da imagem à metade da tela */
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            overflow: hidden; 
+            border: 2px solid #cbd5e1;
+        }
+    
+        canvas, img { 
+            max-width: 100%; 
+            max-height: 100%; 
+            object-fit: contain; /* Garante que a imagem caiba no quadro sem cortar */
+        }
+    
+        .control-card { 
+            background: white; 
+            padding: 15px; 
+            border-radius: 12px; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px;
+        }
+    
+        /* Botão de captura e controles sempre visíveis */
+        .btn-main { 
+            background: var(--primary); 
+            color: white; 
+            padding: 15px; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            font-size: 1rem;
+        }
+    
+        /* Ajuste do Overlay da Câmera */
+        #cameraArea { 
+            display: none; 
+            position: fixed; 
+            top: 0; left: 0; 
+            width: 100%; height: 100%; 
+            background: black; 
+            z-index: 1000; 
+            flex-direction: column; 
+        }
+        #video { flex: 1; width: 100%; object-fit: contain; }
+        .camera-controls { 
+            padding: 20px; 
+            background: rgba(0,0,0,0.8); 
+            display: flex; 
+            gap: 10px; 
+        }
     </style>
-</head>
-<body>
-
-<div class="header"><strong>Moldura Pro Mobile</strong></div>
-
-<div class="container">
-    <div class="tabs">
-        <button class="tab-btn active" onclick="openTab(event, 'tabIn')">1. Foto</button>
-        <button class="tab-btn" onclick="openTab(event, 'tabWarp')">2. Plano</button>
-        <button class="tab-btn" onclick="openTab(event, 'tabCrop')">3. Corte</button>
-        <button class="tab-btn" onclick="openTab(event, 'tabFinal')">4. Final</button>
-    </div>
-
+    
     <div id="tabIn" class="tab-content active">
         <div class="control-card">
-            <button class="btn-cam" onclick="startCamera()">Usar Câmera Traseira</button>
+            <button class="btn-cam" onclick="startCamera()">Abrir Câmera Traseira</button>
             <input type="file" id="fileInput" accept="image/*">
-            
-            <div style="border-top: 1px solid #eee; padding-top: 10px; margin-top: 5px;">
-                <label>Sensibilidade de Detecção (Canny)</label>
+        </div>
+    
+        <div class="visualizer">
+            <img id="imgOriginal" src="" style="display:none">
+            <p id="msgIn" style="color:white">Aguardando Imagem...</p>
+        </div>
+    
+        <div class="control-card">
+            <label>Ajuste Fino de Detecção (Canny)</label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                 <div class="control-group">
-                    <label>Bordas Fracas: <span id="valCanny1">50</span></label>
+                    <label>Fracas: <span id="valCanny1">50</span></label>
                     <input type="range" id="canny1" min="10" max="200" value="50" oninput="updateCanny()">
                 </div>
                 <div class="control-group">
-                    <label>Bordas Fortes: <span id="valCanny2">150</span></label>
+                    <label>Fortes: <span id="valCanny2">150</span></label>
                     <input type="range" id="canny2" min="100" max="400" value="150" oninput="updateCanny()">
                 </div>
-                <small style="font-size: 0.7rem; color: #64748b;">Ajuste se a moldura não for detectada (clara no claro).</small>
             </div>
+            <button class="btn-main" onclick="processWarp()">Confirmar e Planificar</button>
         </div>
-        <div class="visualizer">
-            <img id="imgOriginal" src="" style="display:none">
-            <canvas id="canvasPreview" style="max-width: 100%;"></canvas>
-            <p id="msgIn">Sem Imagem</p>
-        </div>
-        <button class="btn-main" onclick="processWarp()">Confirmar e Planificar</button>
     </div>
+    
+    <div id="cameraArea">
+        <video id="video" autoplay playsinline></video>
+        <div class="camera-controls">
+            <button class="btn-main" onclick="capture()">Tirar Foto</button>
+            <button style="background:#ef4444; color:white; padding:15px; border-radius:8px;" onclick="stopCamera()">Cancelar</button>
+        </div>
+    </div>
+
 
     <div id="tabWarp" class="tab-content">
         <div class="control-card">

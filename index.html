@@ -113,12 +113,11 @@
 
     // Sistema de Abas
     function openTab(evt, tabId) {
-        let contents = document.getElementsByClassName("tab-content");
-        for (let c of contents) c.classList.remove("active");
-        let btns = document.getElementsByClassName("tab-btn");
-        for (let b of btns) b.classList.remove("active");
+        document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
+        document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
+        
         document.getElementById(tabId).classList.add("active");
-        evt.currentTarget.classList.add("active");
+        evt.target.classList.add("active");  // Usar 'target' em vez de 'currentTarget'
     }
 
     // Leitura do arquivo

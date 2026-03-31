@@ -3,491 +3,297 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Processador de Quadros Mobile</title>
+    <title>Processador de Quadros - Pro Edition</title>
     <script async src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript"></script>
     <style>
         :root { --primary: #2563eb; --secondary: #10b981; --bg: #f1f5f9; }
-        
-        body { 
-            font-family: system-ui, -apple-system, sans-serif; 
-            margin: 0; 
-            background: var(--bg); 
-            color: #1e293b; 
-            overflow-y: auto; 
-            min-height: 100vh;
-        }
-
-        .container { 
-            max-width: 600px; 
-            margin: auto; 
-            padding: 10px; 
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .tabs { 
-            display: flex; 
-            overflow-x: auto; 
-            background: #e2e8f0; 
-            border-radius: 8px; 
-            padding: 2px;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .tab-btn { 
-            flex: 1; 
-            padding: 12px 5px; 
-            border: none; 
-            background: none; 
-            cursor: pointer; 
-            font-size: 0.75rem; 
-            font-weight: bold; 
-            white-space: nowrap; 
-            color: #64748b; 
-        }
-
-        .tab-btn.active { 
-            background: white; 
-            color: var(--primary); 
-            border-radius: 6px; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1); 
-        }
-
+        body { font-family: system-ui, sans-serif; margin: 0; background: var(--bg); color: #1e293b; }
+        .container { max-width: 600px; margin: auto; padding: 10px; display: flex; flex-direction: column; gap: 15px; }
+        .tabs { display: flex; background: #e2e8f0; border-radius: 8px; padding: 2px; position: sticky; top: 0; z-index: 100; }
+        .tab-btn { flex: 1; padding: 12px 5px; border: none; background: none; cursor: pointer; font-size: 0.75rem; font-weight: bold; color: #64748b; }
+        .tab-btn.active { background: white; color: var(--primary); border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .tab-content { display: none; flex-direction: column; gap: 15px; }
         .tab-content.active { display: flex; }
-
-        .visualizer { 
-            width: 100%; 
-            background: #333; 
-            border-radius: 8px; 
-            height: 45vh; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            overflow: hidden; 
-            border: 2px solid #cbd5e1;
-        }
-
+        .visualizer { width: 100%; background: #333; border-radius: 8px; height: 40vh; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 2px solid #cbd5e1; }
         canvas, img { max-width: 100%; max-height: 100%; object-fit: contain; }
-
-        .control-card { 
-            background: white; 
-            padding: 15px; 
-            border-radius: 12px; 
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1); 
-            display: flex; 
-            flex-direction: column; 
-            gap: 10px;
-        }
-
+        .control-card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 10px; }
         .control-group { display: flex; flex-direction: column; gap: 4px; }
         label { font-size: 0.75rem; font-weight: bold; color: #64748b; }
         input[type="number"], input[type="file"], select { padding: 8px; border: 1px solid #ddd; border-radius: 6px; }
-
-        .btn-main { background: var(--primary); color: white; padding: 15px; border-radius: 8px; border:none; font-weight: bold; }
-        .btn-cam { background: #6366f1; color: white; padding: 10px; border-radius: 8px; border:none; margin-bottom: 5px; font-weight: bold;}
-        .download-btn { background: var(--secondary); color: white; padding: 15px; border-radius: 8px; border:none; font-weight: bold; margin-top: 10px;}
-
-        #cameraArea { 
-            display: none; 
-            position: fixed; 
-            top: 0; left: 0; 
-            width: 100%; height: 100%; 
-            background: black; 
-            z-index: 1000; 
-            flex-direction: column; 
-        }
-        #video { flex: 1; width: 100%; object-fit: contain; }
-        .camera-controls { padding: 20px; background: rgba(0,0,0,0.8); display: flex; gap: 10px; }
+        .btn-main { background: var(--primary); color: white; padding: 15px; border-radius: 8px; border:none; font-weight: bold; cursor: pointer; }
+        .download-btn { background: var(--secondary); color: white; padding: 15px; border-radius: 8px; border:none; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="tabs">
-        <button class="tab-btn active" onclick="openTab(event, 'tabIn')">1. Foto</button>
-        <button class="tab-btn" onclick="openTab(event, 'tabWarp')">2. Plano</button>
-        <button class="tab-btn" onclick="openTab(event, 'tabCrop')">3. Corte</button>
-        <button class="tab-btn" onclick="openTab(event, 'tabFinal')">4. Final</button>
+        <button class="tab-btn active" onclick="openTab('tabIn')">1. Foto</button>
+        <button class="tab-btn" onclick="openTab('tabWarp')">2. Plano</button>
+        <button class="tab-btn" onclick="openTab('tabCrop')">3. Corte</button>
+        <button class="tab-btn" onclick="openTab('tabFinal')">4. Final</button>
     </div>
 
     <div id="tabIn" class="tab-content active">
         <div class="control-card">
-            <button class="btn-cam" onclick="startCamera()">Abrir Câmera Traseira</button>
             <input type="file" id="fileInput" accept="image/*">
         </div>
         <div class="visualizer">
-            <img id="imgOriginal" src="" style="display:none">
-            <p id="msgIn" style="color:white">Aguardando Imagem...</p>
+            <img id="imgOriginal" src="">
         </div>
         <div class="control-card">
             <div class="control-group">
-                <label>Tipo de Moldura / Fundo</label>
-                <select id="modeSelector" onchange="toggleSliders()">
-                    <option value="escuro-branco">Moldura Escura em Fundo Claro</option>
-                    <option value="branco-branco">Moldura Branca em Fundo Branco</option>
+                <label>Tipo de Detecção</label>
+                <select id="modeSelector" onchange="toggleUI()">
+                    <option value="escuro-branco">Moldura Escura (Canny)</option>
+                    <option value="branco-branco">Branco no Branco (Scharr/Gradient)</option>
                 </select>
             </div>
 
-            <div id="slidersCanny" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div id="uiCanny" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                 <div class="control-group">
-                    <label>Canny Fracas: <span id="valCanny1">50</span></label>
-                    <input type="range" id="canny1" min="10" max="200" value="50" oninput="updateCanny()">
+                    <label>Threshold 1: <span id="vC1">50</span></label>
+                    <input type="range" id="c1" min="10" max="150" value="50" oninput="vC1.innerText=this.value">
                 </div>
                 <div class="control-group">
-                    <label>Canny Fortes: <span id="valCanny2">150</span></label>
-                    <input type="range" id="canny2" min="100" max="400" value="150" oninput="updateCanny()">
-                </div>
-            </div>
-
-            <div id="slidersScharr" style="display:none; grid-template-columns: 1fr 1fr; gap:10px;">
-                <div class="control-group">
-                    <label>Sensib. Scharr: <span id="valScharr">15</span></label>
-                    <input type="range" id="scharrThresh" min="5" max="100" value="15" oninput="updateScharr()">
-                </div>
-                <div class="control-group">
-                    <label>Tamanho Margem: <span id="valMargin">250</span>px</label>
-                    <input type="range" id="marginWarp" min="50" max="400" value="250" oninput="updateMargin()">
+                    <label>Threshold 2: <span id="vC2">150</span></label>
+                    <input type="range" id="c2" min="100" max="300" value="150" oninput="vC2.innerText=this.value">
                 </div>
             </div>
 
-            <button class="btn-main" onclick="processWarp()">Confirmar e Planificar</button>
+            <div id="uiScharr" style="display:none; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div class="control-group">
+                    <label>Sensibilidade: <span id="vS">15</span></label>
+                    <input type="range" id="sThresh" min="5" max="60" value="15" oninput="vS.innerText=this.value">
+                </div>
+                <div class="control-group">
+                    <label>Margem Warp: <span id="vM">250</span>px</label>
+                    <input type="range" id="mWarp" min="100" max="400" value = "250" oninput="vM.innerText=this.value">
+                </div>
+            </div>
+
+            <button class="btn-main" onclick="processWarp()">Planificar Quadro</button>
         </div>
     </div>
 
     <div id="tabWarp" class="tab-content">
-        <div class="control-card"><label>Resultado da Planificação</label></div>
         <div class="visualizer"><canvas id="canvasWarp"></canvas></div>
-        <button class="btn-main" onclick="openTab(null, 'tabCrop')">Ir para Remoção de Moldura</button>
+        <button class="btn-main" onclick="openTab('tabCrop')">Prosseguir para Recorte</button>
     </div>
 
     <div id="tabCrop" class="tab-content">
         <div class="control-card">
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                <div class="control-group"><label>Ref. (mm)</label><input type="number" id="refMM" value="500" onchange="processCrop()"></div>
-                <div class="control-group"><label>Ripa (mm)</label><input type="number" id="ripaMM" value="15" onchange="processCrop()"></div>
+            <div id="autoDetectBox">
+                <button class="btn-main" style="background:#0284c7" onclick="runAutoDetect()">Detectar Moldura Branca (Auto)</button>
             </div>
-            <div class="control-group">
-                <label>Ajuste Fino: <span id="valOffset">0</span>px</label>
-                <input type="range" id="marginAdj" min="-50" max="50" value="0" oninput="updateOffset(this.value)">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top:10px;">
+                <div class="control-group"><label>Ref. (mm)</label><input type="number" id="refMM" value="500"></div>
+                <div class="control-group"><label>Ripa (mm)</label><input type="number" id="ripaMM" value="15"></div>
             </div>
-            <button class="btn-main" style="background:#0284c7" id="btnAutoDetect" onclick="runAutoDetect()">Detectar Moldura Automaticamente</button>
+            <button class="btn-main" onclick="manualCrop()">Aplicar Recorte Manual (Ripa)</button>
         </div>
         <div class="visualizer"><canvas id="canvasCrop"></canvas></div>
-        <button class="btn-main" onclick="openTab(null, 'tabFinal')">Ir para Nova Moldura</button>
+        <button class="btn-main" onclick="openTab('tabFinal')">Finalizar</button>
     </div>
 
     <div id="tabFinal" class="tab-content">
         <div class="control-card">
-            <div class="control-group"><label>Cor da Moldura</label><input type="color" id="frameColor" value="#1a1a1a" onchange="drawNewFrame()"></div>
-            <div class="control-group"><label>Espessura Nova (mm)</label><input type="number" id="newFrameMM" value="20" onchange="drawNewFrame()"></div>
+            <div class="control-group"><label>Moldura Nova (mm)</label><input type="number" id="newMM" value="20" onchange="drawFinal()"></div>
+            <div class="control-group"><label>Cor</label><input type="color" id="fColor" value="#1a1a1a" onchange="drawFinal()"></div>
         </div>
         <div class="visualizer"><canvas id="canvasFinal"></canvas></div>
-        <button class="download-btn" onclick="downloadResult()">Download PNG</button>
-    </div>
-</div>
-
-<div id="cameraArea">
-    <video id="video" autoplay playsinline></video>
-    <div class="camera-controls">
-        <button class="btn-main" style="flex:1" onclick="capture()">Capturar</button>
-        <button style="background:red; color:white; border:none; padding:15px; border-radius:8px;" onclick="stopCamera()">Sair</button>
+        <button class="download-btn" onclick="download()">Download PNG</button>
     </div>
 </div>
 
 <script>
-    let matWarped = null, matCropped = null, currentScale = 1;
+    let matWarped = null, matCropped = null, scale = 1;
 
-    function openTab(evt, tabId) {
-        document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
-        document.querySelectorAll(".tab-btn").forEach(el => el.classList.remove("active"));
-        document.getElementById(tabId).classList.add("active");
-        
-        const btnIdx = ["tabIn", "tabWarp", "tabCrop", "tabFinal"].indexOf(tabId);
-        document.querySelectorAll(".tab-btn")[btnIdx].classList.add("active");
+    function openTab(id) {
+        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        document.getElementById(id).classList.add("active");
+        const idx = ["tabIn", "tabWarp", "tabCrop", "tabFinal"].indexOf(id);
+        document.querySelectorAll(".tab-btn")[idx].classList.add("active");
     }
 
-    function toggleSliders() {
+    function toggleUI() {
         const mode = document.getElementById('modeSelector').value;
-        const slidersCanny = document.getElementById('slidersCanny');
-        const slidersScharr = document.getElementById('slidersScharr');
-        const btnAuto = document.getElementById('btnAutoDetect');
-
-        if (mode === 'escuro-branco') {
-            slidersCanny.style.display = 'grid';
-            slidersScharr.style.display = 'none';
-            btnAuto.style.display = 'none';
-        } else {
-            slidersCanny.style.display = 'none';
-            slidersScharr.style.display = 'grid';
-            btnAuto.style.display = 'block';
-        }
-    }
-
-    function updateCanny() {
-        document.getElementById('valCanny1').innerText = document.getElementById('canny1').value;
-        document.getElementById('valCanny2').innerText = document.getElementById('canny2').value;
-    }
-
-    function updateScharr() {
-        document.getElementById('valScharr').innerText = document.getElementById('scharrThresh').value;
-    }
-
-    function updateMargin() {
-        document.getElementById('valMargin').innerText = document.getElementById('marginWarp').value;
-    }
-
-    function updateOffset(v) { 
-        document.getElementById('valOffset').innerText = v; 
-        processCrop(); 
-    }
-
-    async function startCamera() {
-        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        document.getElementById('video').srcObject = s;
-        document.getElementById('cameraArea').style.display = 'flex';
-    }
-
-    function stopCamera() {
-        let s = document.getElementById('video').srcObject;
-        if(s) s.getTracks().forEach(t => t.stop());
-        document.getElementById('cameraArea').style.display = 'none';
-    }
-
-    function capture() {
-        const v = document.getElementById('video'), c = document.createElement('canvas');
-        c.width = v.videoWidth; c.height = v.videoHeight;
-        c.getContext('2d').drawImage(v, 0, 0);
-        document.getElementById('imgOriginal').src = c.toDataURL('image/png');
-        document.getElementById('imgOriginal').style.display = 'block';
-        document.getElementById('msgIn').style.display = 'none';
-        stopCamera();
+        document.getElementById('uiCanny').style.display = mode === 'escuro-branco' ? 'grid' : 'none';
+        document.getElementById('uiScharr').style.display = mode === 'branco-branco' ? 'grid' : 'none';
     }
 
     document.getElementById('fileInput').onchange = (e) => {
-        const r = new FileReader();
-        r.onload = (ev) => { 
-            document.getElementById('imgOriginal').src = ev.target.result;
-            document.getElementById('imgOriginal').style.display = 'block';
-            document.getElementById('msgIn').style.display = 'none';
-        };
-        r.readAsDataURL(e.target.files[0]);
+        const reader = new FileReader();
+        reader.onload = (ex) => { document.getElementById('imgOriginal').src = ex.target.result; };
+        reader.readAsDataURL(e.target.files[0]);
     };
 
     function processWarp() {
-        let img = document.getElementById('imgOriginal');
-        if(!img.src || img.src.length < 100) return alert("Carregue uma imagem!");
+        const img = document.getElementById('imgOriginal');
+        if(!img.src) return alert("Selecione uma imagem!");
         
-        const mode = document.getElementById('modeSelector').value;
-        let src = cv.imread(img), gray = new cv.Mat(), edged = new cv.Mat();
+        let src = cv.imread(img);
+        let gray = new cv.Mat();
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-        
-        // Aplica o Blur
         cv.GaussianBlur(gray, gray, new cv.Size(7, 7), 0);
+
+        let edged = new cv.Mat();
+        const mode = document.getElementById('modeSelector').value;
         
-        let c1, c2;
-        if (mode === 'escuro-branco') {
-            c1 = parseInt(document.getElementById('canny1').value);
-            c2 = parseInt(document.getElementById('canny2').value);
-        } else {
-            // No modo Branco-Branco usamos thresholds menores para o Canny inicial
-            c1 = 20; c2 = 50;
-        }
+        // No modo branco-branco, Canny baixo para pegar apenas o retângulo externo
+        let c1 = mode === 'branco-branco' ? 20 : parseInt(document.getElementById('c1').value);
+        let c2 = mode === 'branco-branco' ? 50 : parseInt(document.getElementById('c2').value);
         
         cv.Canny(gray, edged, c1, c2);
-        
-        // Dilatação mínima para conectar as bordas
         let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
         cv.dilate(edged, edged, kernel);
-        kernel.delete();
 
         let contours = new cv.MatVector(), hierarchy = new cv.Mat();
         cv.findContours(edged, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-        
-        let maxA = 0, best = null;
-        let area_img = src.cols * src.rows;
 
+        let best = null, maxArea = 0;
         for (let i = 0; i < contours.size(); ++i) {
             let cnt = contours.get(i);
             let area = cv.contourArea(cnt);
-            if (area > maxA && area > (area_img * 0.1) && area < (area_img * 0.98)) {
+            if (area > (src.cols * src.rows * 0.1)) {
                 let approx = new cv.Mat();
                 cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
-                if (approx.rows == 4) { 
-                    maxA = area; 
-                    if(best) best.delete(); 
-                    best = approx; 
-                } else {
-                    approx.delete();
-                }
+                if (approx.rows == 4 && area > maxArea) {
+                    maxArea = area;
+                    if(best) best.delete();
+                    best = approx;
+                } else { approx.delete(); }
             }
         }
 
         if(best) {
+            // Ordenação de Pontos
             let pts = [];
             for(let i=0; i<4; i++) pts.push({x: best.data32S[i*2], y: best.data32S[i*2+1]});
             pts.sort((a,b) => a.y - b.y);
-            let top = pts.slice(0,2).sort((a,b) => a.x - b.x), bot = pts.slice(2,4).sort((a,b) => a.x - b.x);
-            let sorted = [top[0], top[1], bot[1], bot[0]];
-            
-            let w = Math.max(Math.hypot(sorted[1].x-sorted[0].x, sorted[1].y-sorted[0].y), Math.hypot(sorted[2].x-sorted[3].x, sorted[2].y-sorted[3].y));
-            let h = Math.max(Math.hypot(sorted[3].x-sorted[0].x, sorted[3].y-sorted[0].y), Math.hypot(sorted[2].x-sorted[1].x, sorted[2].y-sorted[1].y));
-            
-            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [sorted[0].x, sorted[0].y, sorted[1].x, sorted[1].y, sorted[2].x, sorted[2].y, sorted[3].x, sorted[3].y]);
-            
-            let dstTri;
-            let out_w, out_h;
-            let margin = 0;
+            let top = pts.slice(0,2).sort((a,b) => a.x - b.x);
+            let bot = pts.slice(2,4).sort((a,b) => a.x - b.x);
+            let sorted = [top[0].x, top[0].y, top[1].x, top[1].y, bot[1].x, bot[1].y, bot[0].x, bot[0].y];
 
-            if (mode === 'branco-branco') {
-                margin = parseInt(document.getElementById('marginWarp').value);
-                out_w = w + 2 * margin;
-                out_h = h + 2 * margin;
-                dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [margin, margin, w + margin, margin, w + margin, h + margin, margin, h + margin]);
-            } else {
-                out_w = w;
-                out_h = h;
-                dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, w, 0, w, h, 0, h]);
-            }
+            let w = Math.hypot(top[1].x - top[0].x, top[1].y - top[0].y);
+            let h = Math.hypot(bot[0].x - top[0].x, bot[0].y - top[0].y);
+
+            let margin = mode === 'branco-branco' ? parseInt(document.getElementById('mWarp').value) : 0;
+            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, sorted);
+            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                margin, margin, 
+                w + margin, margin, 
+                w + margin, h + margin, 
+                margin, h + margin
+            ]);
 
             let M = cv.getPerspectiveTransform(srcTri, dstTri);
-            
             if(matWarped) matWarped.delete();
             matWarped = new cv.Mat();
-            cv.warpPerspective(src, matWarped, M, new cv.Size(out_w, out_h));
+            cv.warpPerspective(src, matWarped, M, new cv.Size(w + 2*margin, h + 2*margin));
             cv.imshow('canvasWarp', matWarped);
             
+            // Limpeza
             srcTri.delete(); dstTri.delete(); M.delete(); best.delete();
-            
-            // Inicializa o Crop
-            processCrop();
-            openTab(null, 'tabWarp');
+            openTab('tabWarp');
         } else {
-            alert("Quadro não detectado! Tente ajustar os valores.");
+            alert("Não detectou o retângulo externo!");
         }
-        src.delete(); gray.delete(); edged.delete(); contours.delete(); hierarchy.delete();
+        src.delete(); gray.delete(); edged.delete(); contours.delete(); hierarchy.delete(); kernel.delete();
     }
 
-    function processCrop() {
-        if(!matWarped) return;
-        const refMM = parseFloat(document.getElementById('refMM').value);
-        const ripaMM = parseFloat(document.getElementById('ripaMM').value);
-        const offset = parseInt(document.getElementById('marginAdj').value);
-        
-        // No modo automático (branco-branco), essa escala calcula-se baseada na área interna detectada
-        currentScale = matWarped.cols / refMM;
-        const ripaPx = Math.round(ripaMM * currentScale) + offset;
-        
-        let rect = new cv.Rect(ripaPx, ripaPx, matWarped.cols - 2*ripaPx, matWarped.rows - 2*ripaPx);
-        if(rect.width > 0 && rect.height > 0) {
-            let roi = matWarped.roi(rect);
-            if(matCropped) matCropped.delete();
-            matCropped = roi.clone();
-            cv.imshow('canvasCrop', matCropped);
-            roi.delete();
-            drawNewFrame();
-        }
-    }
-
-    // A MÁGICA: Detecção de fora para dentro adaptada para OpenCV.js
     function runAutoDetect() {
-        if(!matWarped) return alert("Gere o plano primeiro!");
-
-        let gray = new cv.Mat();
+        if(!matWarped) return;
+        let gray = new cv.Mat(), blurred = new cv.Mat();
         cv.cvtColor(matWarped, gray, cv.COLOR_RGBA2GRAY);
-        
-        let blurred = new cv.Mat();
         cv.GaussianBlur(gray, blurred, new cv.Size(11, 11), 0);
 
-        // Operador Scharr usando Sobel com tamanho -1 no JS
-        let grad_x = new cv.Mat(), grad_y = new cv.Mat();
-        cv.Sobel(blurred, grad_x, cv.CV_64F, 1, 0, -1);
-        cv.Sobel(blurred, grad_y, cv.CV_64F, 0, 1, -1);
-
-        // Magnitude
+        // IMPLEMENTAÇÃO SCHARR REAL
+        let gradX = new cv.Mat(), gradY = new cv.Mat();
+        cv.Sobel(blurred, gradX, cv.CV_64F, 1, 0, -1);
+        cv.Sobel(blurred, gradY, cv.CV_64F, 0, 1, -1);
+        
+        let absX = new cv.Mat(), absY = new cv.Mat();
+        cv.convertScaleAbs(gradX, absX);
+        cv.convertScaleAbs(gradY, absY);
+        
         let mag = new cv.Mat();
-        cv.magnitude(grad_x, grad_y, mag);
-        mag.convertTo(mag, cv.CV_8U);
+        cv.addWeighted(absX, 0.5, absY, 0.5, 0, mag);
 
-        // Threshold
-        let threshVal = parseInt(document.getElementById('scharrThresh').value);
         let thresh = new cv.Mat();
-        cv.threshold(mag, thresh, threshVal, 255, cv.THRESH_BINARY);
+        let sV = parseInt(document.getElementById('sThresh').value);
+        cv.threshold(mag, thresh, sV, 255, cv.THRESH_BINARY);
 
-        // Floodfill nos cantos para limpar a parede
-        let h = thresh.rows, w = thresh.cols;
-        let mask = cv.Mat.zeros(h + 2, w + 2, cv.CV_8U);
-        let color = new cv.Scalar(0);
+        // Limpeza de bordas (Floodfill nos 4 cantos)
+        let mask = cv.Mat.zeros(thresh.rows + 2, thresh.cols + 2, cv.CV_8U);
+        let pts = [new cv.Point(0,0), new cv.Point(thresh.cols-1, 0), new cv.Point(0, thresh.rows-1), new cv.Point(thresh.cols-1, thresh.rows-1)];
+        pts.forEach(p => cv.floodFill(thresh, mask, p, new cv.Scalar(0)));
 
-        cv.floodFill(thresh, mask, new cv.Point(0, 0), color);
-        cv.floodFill(thresh, mask, new cv.Point(0, h - 1), color);
-        cv.floodFill(thresh, mask, new cv.Point(w - 1, 0), color);
-        cv.floodFill(thresh, mask, new cv.Point(w - 1, h - 1), color);
-
-        // Fechamento morfológico
         let kernel = cv.Mat.ones(9, 9, cv.CV_8U);
         cv.morphologyEx(thresh, thresh, cv.MORPH_CLOSE, kernel);
 
         let contours = new cv.MatVector(), hierarchy = new cv.Mat();
-        cv.findContours(thresh, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
+        cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-        let candidates = [];
-        for (let i = 0; i < contours.size(); ++i) {
-            let cnt = contours.get(i);
-            let area = cv.contourArea(cnt);
-            if (area > (h * w * 0.2)) {
-                let approx = new cv.Mat();
-                cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
-                candidates.push({ area: area, points: approx });
+        let maxA = 0, bestRect = null;
+        for(let i=0; i<contours.size(); i++) {
+            let area = cv.contourArea(contours.get(i));
+            if(area > maxA) {
+                maxA = area;
+                bestRect = cv.boundingRect(contours.get(i));
             }
         }
 
-        candidates.sort((a, b) => b.area - a.area);
-
-        if (candidates.length > 0) {
-            let bestCnt = candidates[0].points;
-            let rect = cv.boundingRect(bestCnt);
-            
-            // Simular o comportamento visual: desenhar no canvas e cortar
-            if (matCropped) matCropped.delete();
-            matCropped = matWarped.roi(rect).clone();
-            
+        if(bestRect && maxA > (thresh.rows * thresh.cols * 0.1)) {
+            if(matCropped) matCropped.delete();
+            matCropped = matWarped.roi(bestRect).clone();
+            scale = matCropped.cols / parseFloat(document.getElementById('refMM').value);
             cv.imshow('canvasCrop', matCropped);
-            drawNewFrame();
-            alert("Moldura externa detectada com sucesso!");
+            drawFinal();
         } else {
-            alert("Não foi possível isolar a moldura externa. Tente ajustar a sensibilidade.");
+            alert("Falha no Scharr. Use o Recorte Manual.");
         }
-
-        // Deletar Mats
-        gray.delete(); blurred.delete(); grad_x.delete(); grad_y.delete();
-        mag.delete(); thresh.delete(); mask.delete(); kernel.delete();
-        contours.delete(); hierarchy.delete();
-        candidates.forEach(c => c.points.delete());
+        
+        // Cleanup
+        [gray, blurred, gradX, gradY, absX, absY, mag, thresh, mask, kernel, contours, hierarchy].forEach(m => m.delete());
     }
 
-    function drawNewFrame() {
+    function manualCrop() {
+        if(!matWarped) return;
+        const ref = parseFloat(document.getElementById('refMM').value);
+        const ripa = parseFloat(document.getElementById('ripaMM').value);
+        const marginWarp = parseInt(document.getElementById('mWarp').value) || 0;
+        
+        scale = (matWarped.cols - 2*marginWarp) / ref;
+        let p = Math.round(ripa * scale) + marginWarp;
+        
+        let rect = new cv.Rect(p, p, matWarped.cols - 2*p, matWarped.rows - 2*p);
+        if(matCropped) matCropped.delete();
+        matCropped = matWarped.roi(rect).clone();
+        cv.imshow('canvasCrop', matCropped);
+        drawFinal();
+    }
+
+    function drawFinal() {
         if(!matCropped) return;
-        const newMM = parseFloat(document.getElementById('newFrameMM').value), fW = Math.round(newMM * currentScale), color = document.getElementById('frameColor').value;
+        const nMM = parseFloat(document.getElementById('newMM').value);
+        const pW = Math.round(nMM * scale);
+        const color = document.getElementById('fColor').value;
         const r = parseInt(color.slice(1,3), 16), g = parseInt(color.slice(3,5), 16), b = parseInt(color.slice(5,7), 16);
-        let final = new cv.Mat();
-        cv.copyMakeBorder(matCropped, final, fW, fW, fW, fW, cv.BORDER_CONSTANT, [r, g, b, 255]);
-        cv.imshow('canvasFinal', final);
-        final.delete();
+        
+        let fin = new cv.Mat();
+        cv.copyMakeBorder(matCropped, fin, pW, pW, pW, pW, cv.BORDER_CONSTANT, [r, g, b, 255]);
+        cv.imshow('canvasFinal', fin);
+        fin.delete();
     }
 
-    function downloadResult() {
-        const l = document.createElement('a');
-        l.download = 'quadro.png';
-        l.href = document.getElementById('canvasFinal').toDataURL();
-        l.click();
+    function download() {
+        const link = document.createElement('a');
+        link.download = 'resultado_quadro.png';
+        link.href = document.getElementById('canvasFinal').toDataURL();
+        link.click();
     }
-    
-    // Inicia ocultando os botões certos
-    toggleSliders();
 </script>
 </body>
 </html>

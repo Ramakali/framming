@@ -129,136 +129,173 @@
         reader.readAsDataURL(e.target.files[0]);
     };
 
+    /**
+     * 1. ETAPA DE HOMOGRAFIA (Fiel ao seu homografia_puro_canny)
+     */
     function processWarp() {
         const img = document.getElementById('imgOriginal');
-        if(!img.src) return alert("Selecione uma imagem!");
-        
+        if (!img.src) return alert("Selecione uma imagem!");
+    
         let src = cv.imread(img);
         let gray = new cv.Mat();
-        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-        cv.GaussianBlur(gray, gray, new cv.Size(7, 7), 0);
-
+        let blurred = new cv.Mat();
         let edged = new cv.Mat();
-        const mode = document.getElementById('modeSelector').value;
-        
-        // No modo branco-branco, Canny baixo para pegar apenas o retângulo externo
-        let c1 = mode === 'branco-branco' ? 20 : parseInt(document.getElementById('c1').value);
-        let c2 = mode === 'branco-branco' ? 50 : parseInt(document.getElementById('c2').value);
-        
-        cv.Canny(gray, edged, c1, c2);
+    
+        // 2. Cinza e Blur (7x7 como no seu código)
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray, blurred, new cv.Size(7, 7), 0);
+    
+        // 3. Canny Direto (Thresholds baixos: 20, 50 para branco)
+        cv.Canny(blurred, edged, 20, 50);
+    
+        // 4. Dilatação mínima (3x3)
         let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
         cv.dilate(edged, edged, kernel);
-
-        let contours = new cv.MatVector(), hierarchy = new cv.Mat();
+    
+        // 5. Busca por Contornos
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
         cv.findContours(edged, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-        let best = null, maxArea = 0;
+    
+        let ancora = null;
+        let maxArea = 0;
+        let areaImg = src.cols * src.rows;
+    
         for (let i = 0; i < contours.size(); ++i) {
             let cnt = contours.get(i);
             let area = cv.contourArea(cnt);
-            if (area > (src.cols * src.rows * 0.1)) {
+            if (area > areaImg * 0.1 && area < areaImg * 0.98) {
                 let approx = new cv.Mat();
-                cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
-                if (approx.rows == 4 && area > maxArea) {
+                let peri = cv.arcLength(cnt, true);
+                cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                if (approx.rows === 4 && area > maxArea) {
                     maxArea = area;
-                    if(best) best.delete();
-                    best = approx;
-                } else { approx.delete(); }
+                    if (ancora) ancora.delete();
+                    ancora = approx;
+                } else {
+                    approx.delete();
+                }
             }
         }
-
-        if(best) {
-            // Ordenação de Pontos
+    
+        if (ancora) {
+            // 6. Ordenar Pontos (TL, TR, BR, BL)
             let pts = [];
-            for(let i=0; i<4; i++) pts.push({x: best.data32S[i*2], y: best.data32S[i*2+1]});
-            pts.sort((a,b) => a.y - b.y);
-            let top = pts.slice(0,2).sort((a,b) => a.x - b.x);
-            let bot = pts.slice(2,4).sort((a,b) => a.x - b.x);
+            for (let i = 0; i < 4; i++) pts.push({ x: ancora.data32S[i * 2], y: ancora.data32S[i * 2 + 1] });
+            pts.sort((a, b) => a.y - b.y);
+            let top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
+            let bot = pts.slice(2, 4).sort((a, b) => a.x - b.x);
             let sorted = [top[0].x, top[0].y, top[1].x, top[1].y, bot[1].x, bot[1].y, bot[0].x, bot[0].y];
-
+    
+            // 7. Definir Destino com MARGEM de 250px (Crucial para o passo seguinte)
             let w = Math.hypot(top[1].x - top[0].x, top[1].y - top[0].y);
             let h = Math.hypot(bot[0].x - top[0].x, bot[0].y - top[0].y);
-
-            let margin = mode === 'branco-branco' ? parseInt(document.getElementById('mWarp').value) : 0;
+            let margin = 250;
+    
             let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, sorted);
             let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-                margin, margin, 
-                w + margin, margin, 
-                w + margin, h + margin, 
+                margin, margin,
+                w + margin, margin,
+                w + margin, h + margin,
                 margin, h + margin
             ]);
-
+    
             let M = cv.getPerspectiveTransform(srcTri, dstTri);
-            if(matWarped) matWarped.delete();
+            if (matWarped) matWarped.delete();
             matWarped = new cv.Mat();
-            cv.warpPerspective(src, matWarped, M, new cv.Size(w + 2*margin, h + 2*margin));
+            cv.warpPerspective(src, matWarped, M, new cv.Size(w + 2 * margin, h + 2 * margin));
+    
             cv.imshow('canvasWarp', matWarped);
             
-            // Limpeza
-            srcTri.delete(); dstTri.delete(); M.delete(); best.delete();
+            // Cleanup
+            srcTri.delete(); dstTri.delete(); M.delete(); ancora.delete();
             openTab('tabWarp');
         } else {
-            alert("Não detectou o retângulo externo!");
+            alert("Canny não encontrou o retângulo principal.");
         }
-        src.delete(); gray.delete(); edged.delete(); contours.delete(); hierarchy.delete(); kernel.delete();
+        src.delete(); gray.delete(); blurred.delete(); edged.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
     }
-
+    
+    /**
+     * 2. ETAPA DE DETECÇÃO DE MOLDURA (Fiel ao seu detectar_moldura_pos_planificacao)
+     */
     function runAutoDetect() {
-        if(!matWarped) return;
-        let gray = new cv.Mat(), blurred = new cv.Mat();
+        if (!matWarped) return;
+    
+        let gray = new cv.Mat();
+        let blurred = new cv.Mat();
         cv.cvtColor(matWarped, gray, cv.COLOR_RGBA2GRAY);
         cv.GaussianBlur(gray, blurred, new cv.Size(11, 11), 0);
-
-        // IMPLEMENTAÇÃO SCHARR REAL
-        let gradX = new cv.Mat(), gradY = new cv.Mat();
+    
+        // Gradiente Scharr
+        let gradX = new cv.Mat();
+        let gradY = new cv.Mat();
         cv.Sobel(blurred, gradX, cv.CV_64F, 1, 0, -1);
         cv.Sobel(blurred, gradY, cv.CV_64F, 0, 1, -1);
-        
-        let absX = new cv.Mat(), absY = new cv.Mat();
-        cv.convertScaleAbs(gradX, absX);
-        cv.convertScaleAbs(gradY, absY);
-        
+    
+        // Magnitude
         let mag = new cv.Mat();
-        cv.addWeighted(absX, 0.5, absY, 0.5, 0, mag);
-
+        cv.magnitude(gradX, gradY, mag);
+        
+        // np.uint8(np.clip(mag, 0, 255))
+        let mag8u = new cv.Mat();
+        mag.convertTo(mag8u, cv.CV_8U);
+    
+        // Threshold Fixo 15
         let thresh = new cv.Mat();
-        let sV = parseInt(document.getElementById('sThresh').value);
-        cv.threshold(mag, thresh, sV, 255, cv.THRESH_BINARY);
-
-        // Limpeza de bordas (Floodfill nos 4 cantos)
-        let mask = cv.Mat.zeros(thresh.rows + 2, thresh.cols + 2, cv.CV_8U);
-        let pts = [new cv.Point(0,0), new cv.Point(thresh.cols-1, 0), new cv.Point(0, thresh.rows-1), new cv.Point(thresh.cols-1, thresh.rows-1)];
-        pts.forEach(p => cv.floodFill(thresh, mask, p, new cv.Scalar(0)));
-
+        cv.threshold(mag8u, thresh, 15, 255, cv.THRESH_BINARY);
+    
+        // LIMPEZA DAS BORDAS (FloodFill nos 4 cantos)
+        let h = thresh.rows;
+        let w = thresh.cols;
+        let mask = cv.Mat.zeros(h + 2, w + 2, cv.CV_8U);
+        let corners = [new cv.Point(0, 0), new cv.Point(0, h - 1), new cv.Point(w - 1, 0), new cv.Point(w - 1, h - 1)];
+        corners.forEach(pt => cv.floodFill(thresh, mask, pt, new cv.Scalar(0)));
+    
+        // Fechamento Morfológico 9x9
         let kernel = cv.Mat.ones(9, 9, cv.CV_8U);
         cv.morphologyEx(thresh, thresh, cv.MORPH_CLOSE, kernel);
-
-        let contours = new cv.MatVector(), hierarchy = new cv.Mat();
-        cv.findContours(thresh, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-        let maxA = 0, bestRect = null;
-        for(let i=0; i<contours.size(); i++) {
-            let area = cv.contourArea(contours.get(i));
-            if(area > maxA) {
-                maxA = area;
-                bestRect = cv.boundingRect(contours.get(i));
+    
+        // Contornos com Hierarquia (RETR_TREE)
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(thresh, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
+    
+        let candidatos = [];
+        for (let i = 0; i < contours.size(); ++i) {
+            let cnt = contours.get(i);
+            let area = cv.contourArea(cnt);
+            if (area > (h * w * 0.2)) {
+                let approx = new cv.Mat();
+                let peri = cv.arcLength(cnt, true);
+                cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                candidatos.push({ area: area, points: approx });
             }
         }
-
-        if(bestRect && maxA > (thresh.rows * thresh.cols * 0.1)) {
-            if(matCropped) matCropped.delete();
-            matCropped = matWarped.roi(bestRect).clone();
-            scale = matCropped.cols / parseFloat(document.getElementById('refMM').value);
+    
+        // Ordenar por área descendente
+        candidatos.sort((a, b) => b.area - a.area);
+    
+        if (candidatos.length > 0) {
+            let rect = cv.boundingRect(candidatos[0].points);
+            if (matCropped) matCropped.delete();
+            matCropped = matWarped.roi(rect).clone();
+            
+            // Ajustar escala baseada na referência
+            let refMM = parseFloat(document.getElementById('refMM').value);
+            currentScale = matCropped.cols / refMM;
+    
             cv.imshow('canvasCrop', matCropped);
-            drawFinal();
+            drawNewFrame();
+            alert("Moldura externa isolada.");
         } else {
-            alert("Falha no Scharr. Use o Recorte Manual.");
+            alert("Não foi possível encontrar a moldura externa.");
         }
-        
-        // Cleanup
-        [gray, blurred, gradX, gradY, absX, absY, mag, thresh, mask, kernel, contours, hierarchy].forEach(m => m.delete());
+    
+        // Cleanup Final
+        [gray, blurred, gradX, gradY, mag, mag8u, thresh, mask, kernel, contours, hierarchy].forEach(m => m.delete());
+        candidatos.forEach(c => c.points.delete());
     }
-
     function manualCrop() {
         if(!matWarped) return;
         const ref = parseFloat(document.getElementById('refMM').value);

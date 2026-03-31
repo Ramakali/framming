@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detector de Moldura - Protótipo Web</title>
+    <style>
+        body { font-family: sans-serif; background: #1a1a1a; color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { max-width: 900px; width: 100%; text-align: center; }
+        canvas { max-width: 100%; height: auto; background: #333; margin-top: 10px; border: 1px solid #555; }
+        .controls { background: #2a2a2a; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: grid; gap: 10px; }
+        button { padding: 10px 20px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        button:disabled { background: #555; }
+        .status { color: #ffcc00; font-size: 0.9em; margin-bottom: 10px; }
+        .hidden { display: none; }
+        label { font-size: 0.8em; color: #aaa; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Detector de Moldura (Canny + Scharr)</h2>
+    <p id="status" class="status">Aguardando OpenCV.js...</p>
+
+    <div class="controls">
+        <input type="file" id="fileInput" accept="image/*">
+        <div>
+            <label>Referência (mm):</label>
+            <input type="number" id="refMM" value="100" style="width: 60px;">
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: center;">
+            <button id="btnWarp" disabled onclick="processWarp()">1. Planificar (Canny)</button>
+            <button id="btnDetect" disabled onclick="runAutoDetect()">2. Isolar Moldura (Scharr)</button>
+        </div>
+    </div>
+
+    <div id="displayArea">
+        <div id="tabOriginal">
+            <p>Original:</p>
+            <img id="imgOriginal" style="max-width: 300px; display: none;">
+            <canvas id="canvasInput"></canvas>
+        </div>
+        
+        <div id="tabWarp">
+            <p>Resultado Planificação:</p>
+            <canvas id="canvasWarp"></canvas>
+        </div>
+
+        <div id="tabCrop">
+            <p>Moldura Detectada Final:</p>
+            <canvas id="canvasCrop"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    let matWarped = null;
+    let matCropped = null;
+    let currentScale = 1;
+
+    // Função auxiliar para trocar abas visuais (simulada)
+    function openTab(id) { console.log("Navegando para: " + id); }
+    
+    // Função para desenhar o resultado final (simulada)
+    function drawNewFrame() { console.log("Moldura final processada."); }
+
+    // Carregar imagem para o canvas inicial
+    document.getElementById('fileInput').onchange = function(e) {
+        let reader = new FileReader();
+        reader.onload = function(event) {
+            let img = new Image();
+            img.onload = function() {
+                let src = cv.imread(img);
+                cv.imshow('canvasInput', src);
+                document.getElementById('imgOriginal').src = event.target.result;
+                document.getElementById('btnWarp').disabled = false;
+                src.delete();
+            }
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(e.target.files[0]);
+    };
+
+    /**
+     * 1. ETAPA DE HOMOGRAFIA (Fiel ao seu homografia_puro_canny)
+     */
+    function processWarp() {
+        const imgElement = document.getElementById('imgOriginal');
+        let src = cv.imread(imgElement);
+        let gray = new cv.Mat();
+        let blurred = new cv.Mat();
+        let edged = new cv.Mat();
+
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray, blurred, new cv.Size(7, 7), 0);
+
+        // Canny Direto (20, 50)
+        cv.Canny(blurred, edged, 20, 50);
+
+        let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+        cv.dilate(edged, edged, kernel);
+
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(edged, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+        let ancora = null;
+        let maxArea = 0;
+        let areaImg = src.cols * src.rows;
+
+        for (let i = 0; i < contours.size(); ++i) {
+            let cnt = contours.get(i);
+            let area = cv.contourArea(cnt);
+            if (area > areaImg * 0.1 && area < areaImg * 0.98) {
+                let approx = new cv.Mat();
+                let peri = cv.arcLength(cnt, true);
+                cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                if (approx.rows === 4 && area > maxArea) {
+                    maxArea = area;
+                    if (ancora) ancora.delete();
+                    ancora = approx;
+                } else {
+                    approx.delete();
+                }
+            }
+        }
+
+        if (ancora) {
+            let pts = [];
+            for (let i = 0; i < 4; i++) pts.push({ x: ancora.data32S[i * 2], y: ancora.data32S[i * 2 + 1] });
+            pts.sort((a, b) => a.y - b.y);
+            let top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
+            let bot = pts.slice(2, 4).sort((a, b) => a.x - b.x);
+            let sorted = [top[0].x, top[0].y, top[1].x, top[1].y, bot[1].x, bot[1].y, bot[0].x, bot[0].y];
+
+            let w = Math.hypot(top[1].x - top[0].x, top[1].y - top[0].y);
+            let h = Math.hypot(bot[0].x - top[0].x, bot[0].y - top[0].y);
+            let margin = 250;
+
+            let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, sorted);
+            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                margin, margin,
+                w + margin, margin,
+                w + margin, h + margin,
+                margin, h + margin
+            ]);
+
+            let M = cv.getPerspectiveTransform(srcTri, dstTri);
+            if (matWarped) matWarped.delete();
+            matWarped = new cv.Mat();
+            cv.warpPerspective(src, matWarped, M, new cv.Size(w + 2 * margin, h + 2 * margin));
+
+            cv.imshow('canvasWarp', matWarped);
+            document.getElementById('btnDetect').disabled = false;
+            
+            srcTri.delete(); dstTri.delete(); M.delete(); ancora.delete();
+        } else {
+            alert("Canny não encontrou o retângulo principal.");
+        }
+        src.delete(); gray.delete(); blurred.delete(); edged.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
+    }
+
+    /**
+     * 2. ETAPA DE DETECÇÃO DE MOLDURA (Scharr)
+     */
+    function runAutoDetect() {
+        if (!matWarped) return;
+
+        let gray = new cv.Mat();
+        let blurred = new cv.Mat();
+        cv.cvtColor(matWarped, gray, cv.COLOR_RGBA2GRAY);
+        cv.GaussianBlur(gray, blurred, new cv.Size(11, 11), 0);
+
+        let gradX = new cv.Mat();
+        let gradY = new cv.Mat();
+        cv.Sobel(blurred, gradX, cv.CV_64F, 1, 0, -1);
+        cv.Sobel(blurred, gradY, cv.CV_64F, 0, 1, -1);
+
+        let mag = new cv.Mat();
+        cv.magnitude(gradX, gradY, mag);
+        
+        let mag8u = new cv.Mat();
+        mag.convertTo(mag8u, cv.CV_8U);
+
+        let thresh = new cv.Mat();
+        cv.threshold(mag8u, thresh, 15, 255, cv.THRESH_BINARY);
+
+        let h = thresh.rows;
+        let w = thresh.cols;
+        let mask = cv.Mat.zeros(h + 2, w + 2, cv.CV_8U);
+        let corners = [new cv.Point(0, 0), new cv.Point(0, h - 1), new cv.Point(w - 1, 0), new cv.Point(w - 1, h - 1)];
+        let color = new cv.Scalar(0);
+        corners.forEach(pt => cv.floodFill(thresh, mask, pt, color));
+
+        let kernel = cv.Mat.ones(9, 9, cv.CV_8U);
+        cv.morphologyEx(thresh, thresh, cv.MORPH_CLOSE, kernel);
+
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(thresh, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
+
+        let candidatos = [];
+        for (let i = 0; i < contours.size(); ++i) {
+            let cnt = contours.get(i);
+            let area = cv.contourArea(cnt);
+            if (area > (h * w * 0.2)) {
+                let approx = new cv.Mat();
+                let peri = cv.arcLength(cnt, true);
+                cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                candidatos.push({ area: area, points: approx });
+            }
+        }
+
+        candidatos.sort((a, b) => b.area - a.area);
+
+        if (candidatos.length > 0) {
+            let rect = cv.boundingRect(candidatos[0].points);
+            if (matCropped) matCropped.delete();
+            matCropped = matWarped.roi(rect).clone();
+            
+            cv.imshow('canvasCrop', matCropped);
+            alert("Moldura externa isolada com sucesso!");
+        } else {
+            alert("Não foi possível encontrar a moldura externa.");
+        }
+
+        [gray, blurred, gradX, gradY, mag, mag8u, thresh, mask, kernel, contours, hierarchy].forEach(m => m.delete());
+        candidatos.forEach(c => c.points.delete());
+    }
+
+    // Inicialização do OpenCV
+    var Module = {
+        onRuntimeInitialized() {
+            document.getElementById('status').innerHTML = 'OpenCV.js pronto para uso.';
+            document.getElementById('status').style.color = '#00ff00';
+        }
+    };
+</script>
+<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
+
+</body>
+</html>

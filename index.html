@@ -26,7 +26,6 @@
             gap: 15px;
         }
 
-        /* Menu de Abas Fixo */
         .tabs { 
             display: flex; 
             overflow-x: auto; 
@@ -86,7 +85,7 @@
 
         .control-group { display: flex; flex-direction: column; gap: 4px; }
         label { font-size: 0.75rem; font-weight: bold; color: #64748b; }
-        input[type="number"], input[type="file"] { padding: 8px; border: 1px solid #ddd; border-radius: 6px; }
+        input[type="number"], input[type="file"], select { padding: 8px; border: 1px solid #ddd; border-radius: 6px; }
 
         .btn-main { background: var(--primary); color: white; padding: 15px; border-radius: 8px; border:none; font-weight: bold; }
         .btn-cam { background: #6366f1; color: white; padding: 10px; border-radius: 8px; border:none; margin-bottom: 5px; font-weight: bold;}
@@ -125,17 +124,36 @@
             <p id="msgIn" style="color:white">Aguardando Imagem...</p>
         </div>
         <div class="control-card">
-            <label>Contraste de Detecção (Canny)</label>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div class="control-group">
+                <label>Tipo de Moldura / Fundo</label>
+                <select id="modeSelector" onchange="toggleSliders()">
+                    <option value="escuro-branco">Moldura Escura em Fundo Claro</option>
+                    <option value="branco-branco">Moldura Branca em Fundo Branco</option>
+                </select>
+            </div>
+
+            <div id="slidersCanny" style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                 <div class="control-group">
-                    <label>Fracas: <span id="valCanny1">50</span></label>
+                    <label>Canny Fracas: <span id="valCanny1">50</span></label>
                     <input type="range" id="canny1" min="10" max="200" value="50" oninput="updateCanny()">
                 </div>
                 <div class="control-group">
-                    <label>Fortes: <span id="valCanny2">150</span></label>
+                    <label>Canny Fortes: <span id="valCanny2">150</span></label>
                     <input type="range" id="canny2" min="100" max="400" value="150" oninput="updateCanny()">
                 </div>
             </div>
+
+            <div id="slidersScharr" style="display:none; grid-template-columns: 1fr 1fr; gap:10px;">
+                <div class="control-group">
+                    <label>Sensib. Scharr: <span id="valScharr">15</span></label>
+                    <input type="range" id="scharrThresh" min="5" max="100" value="15" oninput="updateScharr()">
+                </div>
+                <div class="control-group">
+                    <label>Tamanho Margem: <span id="valMargin">250</span>px</label>
+                    <input type="range" id="marginWarp" min="50" max="400" value="250" oninput="updateMargin()">
+                </div>
+            </div>
+
             <button class="btn-main" onclick="processWarp()">Confirmar e Planificar</button>
         </div>
     </div>
@@ -156,6 +174,7 @@
                 <label>Ajuste Fino: <span id="valOffset">0</span>px</label>
                 <input type="range" id="marginAdj" min="-50" max="50" value="0" oninput="updateOffset(this.value)">
             </div>
+            <button class="btn-main" style="background:#0284c7" id="btnAutoDetect" onclick="runAutoDetect()">Detectar Moldura Automaticamente</button>
         </div>
         <div class="visualizer"><canvas id="canvasCrop"></canvas></div>
         <button class="btn-main" onclick="openTab(null, 'tabFinal')">Ir para Nova Moldura</button>
@@ -191,9 +210,34 @@
         document.querySelectorAll(".tab-btn")[btnIdx].classList.add("active");
     }
 
+    function toggleSliders() {
+        const mode = document.getElementById('modeSelector').value;
+        const slidersCanny = document.getElementById('slidersCanny');
+        const slidersScharr = document.getElementById('slidersScharr');
+        const btnAuto = document.getElementById('btnAutoDetect');
+
+        if (mode === 'escuro-branco') {
+            slidersCanny.style.display = 'grid';
+            slidersScharr.style.display = 'none';
+            btnAuto.style.display = 'none';
+        } else {
+            slidersCanny.style.display = 'none';
+            slidersScharr.style.display = 'grid';
+            btnAuto.style.display = 'block';
+        }
+    }
+
     function updateCanny() {
         document.getElementById('valCanny1').innerText = document.getElementById('canny1').value;
         document.getElementById('valCanny2').innerText = document.getElementById('canny2').value;
+    }
+
+    function updateScharr() {
+        document.getElementById('valScharr').innerText = document.getElementById('scharrThresh').value;
+    }
+
+    function updateMargin() {
+        document.getElementById('valMargin').innerText = document.getElementById('marginWarp').value;
     }
 
     function updateOffset(v) { 
@@ -236,52 +280,107 @@
     function processWarp() {
         let img = document.getElementById('imgOriginal');
         if(!img.src || img.src.length < 100) return alert("Carregue uma imagem!");
+        
+        const mode = document.getElementById('modeSelector').value;
         let src = cv.imread(img), gray = new cv.Mat(), edged = new cv.Mat();
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-        cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
-        let c1 = parseInt(document.getElementById('canny1').value);
-        let c2 = parseInt(document.getElementById('canny2').value);
+        
+        // Aplica o Blur
+        cv.GaussianBlur(gray, gray, new cv.Size(7, 7), 0);
+        
+        let c1, c2;
+        if (mode === 'escuro-branco') {
+            c1 = parseInt(document.getElementById('canny1').value);
+            c2 = parseInt(document.getElementById('canny2').value);
+        } else {
+            // No modo Branco-Branco usamos thresholds menores para o Canny inicial
+            c1 = 20; c2 = 50;
+        }
+        
         cv.Canny(gray, edged, c1, c2);
+        
+        // Dilatação mínima para conectar as bordas
+        let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
+        cv.dilate(edged, edged, kernel);
+        kernel.delete();
+
         let contours = new cv.MatVector(), hierarchy = new cv.Mat();
         cv.findContours(edged, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+        
         let maxA = 0, best = null;
+        let area_img = src.cols * src.rows;
+
         for (let i = 0; i < contours.size(); ++i) {
             let cnt = contours.get(i);
             let area = cv.contourArea(cnt);
-            if (area > maxA) {
+            if (area > maxA && area > (area_img * 0.1) && area < (area_img * 0.98)) {
                 let approx = new cv.Mat();
                 cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
-                if (approx.rows == 4) { maxA = area; if(best) best.delete(); best = approx; }
-                else approx.delete();
+                if (approx.rows == 4) { 
+                    maxA = area; 
+                    if(best) best.delete(); 
+                    best = approx; 
+                } else {
+                    approx.delete();
+                }
             }
         }
+
         if(best) {
             let pts = [];
             for(let i=0; i<4; i++) pts.push({x: best.data32S[i*2], y: best.data32S[i*2+1]});
             pts.sort((a,b) => a.y - b.y);
             let top = pts.slice(0,2).sort((a,b) => a.x - b.x), bot = pts.slice(2,4).sort((a,b) => a.x - b.x);
             let sorted = [top[0], top[1], bot[1], bot[0]];
+            
             let w = Math.max(Math.hypot(sorted[1].x-sorted[0].x, sorted[1].y-sorted[0].y), Math.hypot(sorted[2].x-sorted[3].x, sorted[2].y-sorted[3].y));
             let h = Math.max(Math.hypot(sorted[3].x-sorted[0].x, sorted[3].y-sorted[0].y), Math.hypot(sorted[2].x-sorted[1].x, sorted[2].y-sorted[1].y));
+            
             let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [sorted[0].x, sorted[0].y, sorted[1].x, sorted[1].y, sorted[2].x, sorted[2].y, sorted[3].x, sorted[3].y]);
-            let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, w, 0, w, h, 0, h]);
+            
+            let dstTri;
+            let out_w, out_h;
+            let margin = 0;
+
+            if (mode === 'branco-branco') {
+                margin = parseInt(document.getElementById('marginWarp').value);
+                out_w = w + 2 * margin;
+                out_h = h + 2 * margin;
+                dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [margin, margin, w + margin, margin, w + margin, h + margin, margin, h + margin]);
+            } else {
+                out_w = w;
+                out_h = h;
+                dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, w, 0, w, h, 0, h]);
+            }
+
             let M = cv.getPerspectiveTransform(srcTri, dstTri);
+            
             if(matWarped) matWarped.delete();
             matWarped = new cv.Mat();
-            cv.warpPerspective(src, matWarped, M, new cv.Size(w, h));
+            cv.warpPerspective(src, matWarped, M, new cv.Size(out_w, out_h));
             cv.imshow('canvasWarp', matWarped);
+            
             srcTri.delete(); dstTri.delete(); M.delete(); best.delete();
+            
+            // Inicializa o Crop
             processCrop();
             openTab(null, 'tabWarp');
-        } else alert("Quadro não detectado!");
+        } else {
+            alert("Quadro não detectado! Tente ajustar os valores.");
+        }
         src.delete(); gray.delete(); edged.delete(); contours.delete(); hierarchy.delete();
     }
 
     function processCrop() {
         if(!matWarped) return;
-        const refMM = parseFloat(document.getElementById('refMM').value), ripaMM = parseFloat(document.getElementById('ripaMM').value), offset = parseInt(document.getElementById('marginAdj').value);
+        const refMM = parseFloat(document.getElementById('refMM').value);
+        const ripaMM = parseFloat(document.getElementById('ripaMM').value);
+        const offset = parseInt(document.getElementById('marginAdj').value);
+        
+        // No modo automático (branco-branco), essa escala calcula-se baseada na área interna detectada
         currentScale = matWarped.cols / refMM;
         const ripaPx = Math.round(ripaMM * currentScale) + offset;
+        
         let rect = new cv.Rect(ripaPx, ripaPx, matWarped.cols - 2*ripaPx, matWarped.rows - 2*ripaPx);
         if(rect.width > 0 && rect.height > 0) {
             let roi = matWarped.roi(rect);
@@ -291,6 +390,83 @@
             roi.delete();
             drawNewFrame();
         }
+    }
+
+    // A MÁGICA: Detecção de fora para dentro adaptada para OpenCV.js
+    function runAutoDetect() {
+        if(!matWarped) return alert("Gere o plano primeiro!");
+
+        let gray = new cv.Mat();
+        cv.cvtColor(matWarped, gray, cv.COLOR_RGBA2GRAY);
+        
+        let blurred = new cv.Mat();
+        cv.GaussianBlur(gray, blurred, new cv.Size(11, 11), 0);
+
+        // Operador Scharr usando Sobel com tamanho -1 no JS
+        let grad_x = new cv.Mat(), grad_y = new cv.Mat();
+        cv.Sobel(blurred, grad_x, cv.CV_64F, 1, 0, -1);
+        cv.Sobel(blurred, grad_y, cv.CV_64F, 0, 1, -1);
+
+        // Magnitude
+        let mag = new cv.Mat();
+        cv.magnitude(grad_x, grad_y, mag);
+        mag.convertTo(mag, cv.CV_8U);
+
+        // Threshold
+        let threshVal = parseInt(document.getElementById('scharrThresh').value);
+        let thresh = new cv.Mat();
+        cv.threshold(mag, thresh, threshVal, 255, cv.THRESH_BINARY);
+
+        // Floodfill nos cantos para limpar a parede
+        let h = thresh.rows, w = thresh.cols;
+        let mask = cv.Mat.zeros(h + 2, w + 2, cv.CV_8U);
+        let color = new cv.Scalar(0);
+
+        cv.floodFill(thresh, mask, new cv.Point(0, 0), color);
+        cv.floodFill(thresh, mask, new cv.Point(0, h - 1), color);
+        cv.floodFill(thresh, mask, new cv.Point(w - 1, 0), color);
+        cv.floodFill(thresh, mask, new cv.Point(w - 1, h - 1), color);
+
+        // Fechamento morfológico
+        let kernel = cv.Mat.ones(9, 9, cv.CV_8U);
+        cv.morphologyEx(thresh, thresh, cv.MORPH_CLOSE, kernel);
+
+        let contours = new cv.MatVector(), hierarchy = new cv.Mat();
+        cv.findContours(thresh, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
+
+        let candidates = [];
+        for (let i = 0; i < contours.size(); ++i) {
+            let cnt = contours.get(i);
+            let area = cv.contourArea(cnt);
+            if (area > (h * w * 0.2)) {
+                let approx = new cv.Mat();
+                cv.approxPolyDP(cnt, approx, 0.02 * cv.arcLength(cnt, true), true);
+                candidates.push({ area: area, points: approx });
+            }
+        }
+
+        candidates.sort((a, b) => b.area - a.area);
+
+        if (candidates.length > 0) {
+            let bestCnt = candidates[0].points;
+            let rect = cv.boundingRect(bestCnt);
+            
+            // Simular o comportamento visual: desenhar no canvas e cortar
+            if (matCropped) matCropped.delete();
+            matCropped = matWarped.roi(rect).clone();
+            
+            cv.imshow('canvasCrop', matCropped);
+            drawNewFrame();
+            alert("Moldura externa detectada com sucesso!");
+        } else {
+            alert("Não foi possível isolar a moldura externa. Tente ajustar a sensibilidade.");
+        }
+
+        // Deletar Mats
+        gray.delete(); blurred.delete(); grad_x.delete(); grad_y.delete();
+        mag.delete(); thresh.delete(); mask.delete(); kernel.delete();
+        contours.delete(); hierarchy.delete();
+        candidates.forEach(c => c.points.delete());
     }
 
     function drawNewFrame() {
@@ -309,6 +485,9 @@
         l.href = document.getElementById('canvasFinal').toDataURL();
         l.click();
     }
+    
+    // Inicia ocultando os botões certos
+    toggleSliders();
 </script>
 </body>
 </html>

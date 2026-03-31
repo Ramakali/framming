@@ -129,6 +129,9 @@
         reader.readAsDataURL(e.target.files[0]);
     };
 
+    /**
+     * 1. ETAPA DE HOMOGRAFIA (Fiel ao seu homografia_puro_canny)
+     */
     function processWarp() {
         const img = document.getElementById('imgOriginal');
         if (!img.src || img.src.length < 10) return alert("Selecione uma imagem!");
@@ -138,16 +141,22 @@
         let blurred = new cv.Mat();
         let edged = new cv.Mat();
     
+        // 2. Cinza e Blur (7x7 como no seu código)
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
         cv.GaussianBlur(gray, blurred, new cv.Size(7, 7), 0);
     
+        // CORREÇÃO: Capturando os valores exatos dos sliders no momento do clique
         const t1 = parseInt(document.getElementById('c1').value);
         const t2 = parseInt(document.getElementById('c2').value);
+        
+        // 3. Canny com os Thresholds dinâmicos
         cv.Canny(blurred, edged, t1, t2);
     
+        // 4. Dilatação para fechar o retângulo
         let kernel = cv.Mat.ones(3, 3, cv.CV_8U);
         cv.dilate(edged, edged, kernel);
     
+        // 5. Busca por Contornos
         let contours = new cv.MatVector();
         let hierarchy = new cv.Mat();
         cv.findContours(edged, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
@@ -159,10 +168,13 @@
         for (let i = 0; i < contours.size(); ++i) {
             let cnt = contours.get(i);
             let area = cv.contourArea(cnt);
+            // Filtro de área (entre 10% e 98% da imagem)
             if (area > areaImg * 0.1 && area < areaImg * 0.98) {
                 let approx = new cv.Mat();
                 let peri = cv.arcLength(cnt, true);
                 cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                
+                // Se encontrar 4 pontas e for o maior contorno até agora
                 if (approx.rows === 4 && area > maxArea) {
                     maxArea = area;
                     if (ancora) ancora.delete();
@@ -174,13 +186,17 @@
         }
     
         if (ancora) {
+            // 6. Ordenar Pontos (TL, TR, BR, BL)
             let pts = [];
-            for (let i = 0; i < 4; i++) pts.push({ x: ancora.data32S[i * 2], y: ancora.data32S[i * 2 + 1] });
+            for (let i = 0; i < 4; i++) {
+                pts.push({ x: ancora.data32S[i * 2], y: ancora.data32S[i * 2 + 1] });
+            }
             pts.sort((a, b) => a.y - b.y);
             let top = pts.slice(0, 2).sort((a, b) => a.x - b.x);
             let bot = pts.slice(2, 4).sort((a, b) => a.x - b.x);
             let sorted = [top[0].x, top[0].y, top[1].x, top[1].y, bot[1].x, bot[1].y, bot[0].x, bot[0].y];
     
+            // 7. Definir Destino com a Margem escolhida no Slider
             let w = Math.hypot(top[1].x - top[0].x, top[1].y - top[0].y);
             let h = Math.hypot(bot[0].x - top[0].x, bot[0].y - top[0].y);
             let margin = parseInt(document.getElementById('mWarp').value);
@@ -200,11 +216,14 @@
     
             cv.imshow('canvasWarp', matWarped);
             
+            // Cleanup de memória
             srcTri.delete(); dstTri.delete(); M.delete(); ancora.delete();
             openTab('tabWarp');
         } else {
-            alert("Não foi possível detectar o retângulo. Tente ajustar os Thresholds do Canny.");
+            alert("Canny não encontrou um retângulo. Tente DIMINUIR os Thresholds.");
         }
+        
+        // Cleanup final
         src.delete(); gray.delete(); blurred.delete(); edged.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
     }
     
